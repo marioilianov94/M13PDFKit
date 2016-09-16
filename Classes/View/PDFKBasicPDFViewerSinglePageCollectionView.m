@@ -87,11 +87,9 @@
     //Get the page number
     NSInteger page = indexPath.row + 1;
     
-    cell.contentView.autoresizingMask = UIViewAutoresizingFlexibleHeight|UIViewAutoresizingFlexibleWidth;
-    
     //Load the content
     cell.pageContentView = [[PDFKPageContentView alloc] initWithFrame:contentSize fileURL:_document.fileURL page:page password:_document.password];
-        
+    
     //Show the thumb while rendering
     [cell.pageContentView showPageThumb:_document.fileURL page:(indexPath.item + 1) password:_document.password guid:_document.guid];
     
@@ -100,16 +98,9 @@
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
 {
-    //Get the current page and notify the delegate
-    NSUInteger page = (scrollView.contentOffset.x + scrollView.frame.size.width) / scrollView.frame.size.width;
-    
-    [_singlePageDelegate singlePageCollectionView:self didDisplayPage:page];
-}
-
-- (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView
-{
-    //Get the current page and notify the delegate
-    NSUInteger page = (scrollView.contentOffset.x + scrollView.frame.size.width) / scrollView.frame.size.width;
+    //Get the current cell and notify the delegate
+    NSIndexPath *indexPath = [self indexPathsForVisibleItems][0];
+    NSUInteger page = indexPath.row + 1;
     
     [_singlePageDelegate singlePageCollectionView:self didDisplayPage:page];
 }
@@ -130,8 +121,12 @@
     }
     
     _pageContentView = pageContentView;
-
+    _pageContentView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.contentView addSubview:_pageContentView];
+    
+    NSMutableArray *constraints = [[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[content]|" options:NSLayoutFormatAlignAllBaseline metrics:nil views:@{@"superview": self.contentView, @"content": _pageContentView}] mutableCopy];
+    [constraints addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[content]|" options:NSLayoutFormatAlignAllLeft metrics:nil views:@{@"superview": self.contentView, @"content": _pageContentView}]];
+    [self.contentView addConstraints:constraints];
 }
 
 - (void)layoutSubviews

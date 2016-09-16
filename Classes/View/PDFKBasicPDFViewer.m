@@ -21,26 +21,59 @@
 #import "PDFKBasicPDFViewerSinglePageCollectionView.h"
 #import <TTOpenInAppActivity/TTOpenInAppActivity.h>
 
+@interface PDFKBasicPDFViewer () <UIToolbarDelegate, UIDocumentInteractionControllerDelegate, UITextFieldDelegate, PDFKPageScrubberDelegate, UIGestureRecognizerDelegate, PDFKBasicPDFViewerThumbsCollectionViewDelegate, PDFKBasicPDFViewerSinglePageCollectionViewDelegate>
 
-@interface PDFKBasicPDFViewer () <UIToolbarDelegate, UIDocumentInteractionControllerDelegate, PDFKPageScrubberDelegate, UIGestureRecognizerDelegate, PDFKBasicPDFViewerThumbsCollectionViewDelegate, PDFKBasicPDFViewerSinglePageCollectionViewDelegate>
-
-@property (nonatomic, retain, readwrite) UIToolbar *navigationToolbar;
-@property (nonatomic, retain, readwrite) UIToolbar *thumbnailSlider;
-@property (nonatomic, strong, readwrite) UIPopoverController *activityPopoverController;
-@property (nonatomic, strong, readwrite) UIBarButtonItem *shareItem;
-@property (nonatomic, strong, readwrite) UIBarButtonItem *bookmarkItem;
-@property (nonatomic, strong, readwrite) PDFKPageScrubber *pageScrubber;
-@property (nonatomic, strong, readwrite) PDFKBasicPDFViewerSinglePageCollectionView *pageCollectionView;
-@property (nonatomic, assign, readwrite) BOOL showingSinglePage;
-@property (nonatomic, strong, readwrite) PDFKBasicPDFViewerThumbsCollectionView *thumbsCollectionView;
-@property (nonatomic, assign, readwrite) BOOL showingBookmarks;
-@property (nonatomic, assign, readwrite) BOOL loadedView;
+/**
+ The toolbar displaied at the top of the screen.
+ */
+@property (nonatomic, retain) UIToolbar *navigationToolbar;
+/**
+ The slider at the bottom of the screen to show the thumbnails.
+ */
+@property (nonatomic, retain) UIToolbar *thumbnailSlider;
+/**
+ The popover controller to share the document on the iPad.
+ */
+@property (nonatomic, strong) UIPopoverController *activityPopoverController;
+/**
+ The share button.
+ */
+@property (nonatomic, strong) UIBarButtonItem *shareItem;
+/**
+ The item that notes wether or not the page is bookmarked.
+ */
+@property (nonatomic, strong) UIBarButtonItem *bookmarkItem;
+/**
+ The page scrubber at the bottom of the view.
+ */
+@property (nonatomic, strong) PDFKPageScrubber *pageScrubber;
+/**
+ The collection view of single pages to display.
+ */
+@property (nonatomic, strong) PDFKBasicPDFViewerSinglePageCollectionView *pageCollectionView;
+/**
+ Wether or not the view is showing a single page.
+ */
+@property (nonatomic, assign) BOOL showingSinglePage;
+/**
+ The collection view that displays all the thumbs.
+ */
+@property (nonatomic, strong) PDFKBasicPDFViewerThumbsCollectionView *thumbsCollectionView;
+/**
+ Wether or not the thumbs collection view is showing thumbs.
+ */
+@property (nonatomic, assign) BOOL showingBookmarks;
+/**
+ YES once view did load called.
+ */
+@property (nonatomic, assign) BOOL loadedView;
 
 @property (nonatomic, strong) UITapGestureRecognizer *singleTapGestureRecognizer;
 @property (nonatomic, strong) UITapGestureRecognizer *doubleTapGestureRecognizer;
 
-@end
+@property (nonatomic, strong) UITextField *numberOfPage;
 
+@end
 
 @implementation PDFKBasicPDFViewer
 
@@ -73,6 +106,10 @@
     return self;
 }
 
+-(BOOL)prefersStatusBarHidden{
+    return YES;
+}
+
 - (void)loadDocument:(PDFKDocument *)document
 {
     if (!_loadedView) {
@@ -84,6 +121,13 @@
     self.view.backgroundColor = [UIColor groupTableViewBackgroundColor];
     
     //Defaults
+    _enableBookmarks = YES;
+    _enableSharing = NO;
+    _enablePrinting = NO;
+    _enableOpening = NO;
+    _enableThumbnailSlider = YES;
+    _enablePreview = YES;
+    _standalone = NO;
     _document = document;
     
     //Create the thumbs view
@@ -103,6 +147,8 @@
     _pageCollectionView = [[PDFKBasicPDFViewerSinglePageCollectionView alloc] initWithFrame:self.view.bounds andDocument:_document];
     _pageCollectionView.translatesAutoresizingMaskIntoConstraints = NO;
     _pageCollectionView.singlePageDelegate = self;
+    
+    
     [self.view addSubview:_pageCollectionView];
     //set constraints
     NSMutableArray *pageConstraints = [[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[collectionView]|" options:NSLayoutFormatAlignAllBaseline metrics:nil views:@{@"superview": self.view, @"collectionView": _pageCollectionView}] mutableCopy];
@@ -127,11 +173,15 @@
     //Create the scrubber
     _pageScrubber = [[PDFKPageScrubber alloc] initWithFrame:CGRectMake(0, self.view.frame.size.height - self.bottomLayoutGuide.length, self.view.frame.size.width, 44.0) document:_document];
     _pageScrubber.scrubberDelegate = self;
+    
     _pageScrubber.delegate = self;
     //Set this to no, cant have autoresizing masks and layout constraints at the same time.
     _pageScrubber.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    
     //Add to the view
     [self.view addSubview:_pageScrubber];
+    
     //Create the constraints
     NSMutableArray *pageScrubberConstraints = [[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[scrubber]|" options:NSLayoutFormatAlignAllBaseline metrics:nil views:@{@"superview": self.view, @"scrubber": _pageScrubber}] mutableCopy];
     [pageScrubberConstraints addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[scrubber(44)]-0-[bottomLayout]" options:NSLayoutFormatAlignAllLeft metrics:nil views:@{@"scrubber": _pageScrubber, @"bottomLayout": self.bottomLayoutGuide}]];
@@ -168,6 +218,9 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+    
+    self.numberOfPage.delegate = self;
+    
     _loadedView = YES;
     if (_document) {
         [self loadDocument:_document];
@@ -219,14 +272,13 @@
     return UIBarPositionBottom;
 }
 
--(void)willAnimateRotationToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration{
-    [super willAnimateRotationToInterfaceOrientation:toInterfaceOrientation duration:duration];
+- (void)willRotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration
+{
+    //Invalidate the layouts of the collection views on rotation, and animate the rotation.
+    [super willRotateToInterfaceOrientation:toInterfaceOrientation duration:duration];
     
     [_thumbsCollectionView.collectionViewLayout invalidateLayout];
     [_pageCollectionView.collectionViewLayout invalidateLayout];
-    
-    [_pageCollectionView displayPage:_document.currentPage animated:NO];
-    
 }
 
 - (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation
@@ -244,7 +296,7 @@
     if (_showingSinglePage) {
         //Done Button
         if (!_standalone) {
-            [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismiss)]];
+            [buttonsArray addObject:[[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"ic_back_button"] landscapeImagePhone:[UIImage imageNamed:@"ic_back_button"] style:UIBarButtonItemStylePlain target:self action:@selector(dismiss)]];
             [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
         }
         
@@ -252,32 +304,36 @@
         if (buttonsArray.count > 0) {
             UIBarButtonItem *space = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace target:nil action:nil];
             space.width = 10.0;
-            [buttonsArray addObject:space];
-        }
-        
-        //Add list
-        UIBarButtonItem *listItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Thumbs"] landscapeImagePhone:[UIImage imageNamed:@"Thumbs"] style:UIBarButtonItemStylePlain target:self action:@selector(list)];
-        [buttonsArray addObject:listItem];
-        
-        //Flexible space
-        [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
-        
-        //Bookmark Button
-        if (_enableBookmarks) {
-            //Add space
-            UIBarButtonItem *space = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace target:nil action:nil];
-            space.width = 10.0;
-            [buttonsArray addObject:space];
-            //Add bookmarks
-            //Change image based on wether or not the page is bookmarked
-            if (![_document.bookmarks containsIndex:_document.currentPage]) {
-                _bookmarkItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Bookmark"] style:UIBarButtonItemStylePlain target:self action:@selector(bookmark)];
-            } else {
-                _bookmarkItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Bookmarked"] style:UIBarButtonItemStylePlain target:self action:@selector(bookmark)];
-            }
             
-            [buttonsArray addObject:_bookmarkItem];
+            [buttonsArray addObject:space];
         }
+        
+        
+        // Pagination on top to change the page
+        UIView *pageChangeView = [[UIView alloc] initWithFrame:CGRectMake(0, 5, 80, 20)];
+        
+        /*UILabel *labelPage = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 60, 20)];
+        labelPage.text = @"Página";
+        [pageChangeView addSubview:labelPage];*/
+        
+        self.numberOfPage = [[UITextField alloc] initWithFrame: CGRectMake(0, 0, 30, 20)];
+        self.numberOfPage.backgroundColor = [UIColor whiteColor];
+        [self.numberOfPage setKeyboardType:UIKeyboardTypePhonePad];
+        [self.numberOfPage setTextAlignment:NSTextAlignmentRight];
+        self.numberOfPage.text = [NSString stringWithFormat:@"%i", _document.currentPage];
+        [self.numberOfPage addTarget:self action:@selector(textFieldShouldReturn:) forControlEvents:UIControlEventEditingDidEndOnExit];
+        self.numberOfPage.keyboardType = UIKeyboardTypeDefault;
+        [pageChangeView addSubview:self.numberOfPage];
+        
+        UILabel *labelOfPages = [[UILabel alloc] initWithFrame:CGRectMake(40, 0, 40, 20)];
+        labelOfPages.text = [NSString stringWithFormat:@"de %i", _document.pageCount];
+        [pageChangeView addSubview:labelOfPages];
+        
+        
+        UIBarButtonItem *pageName = [[UIBarButtonItem alloc] initWithCustomView:pageChangeView];
+        [buttonsArray addObject:pageName];
+        
+        
         
         //Sharing Button
         if (_enableSharing || _enablePrinting || _enableOpening) {
@@ -287,13 +343,43 @@
             _shareItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(send)];
             [buttonsArray addObject:_shareItem];
         }
+        
+        //Flexible space
+        [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
+        
+        //Add list
+        UIBarButtonItem *listItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Thumbs"] landscapeImagePhone:[UIImage imageNamed:@"Thumbs"] style:UIBarButtonItemStylePlain target:self action:@selector(list)];
+        [buttonsArray addObject:listItem];
+        
+        
+        //Bookmark Button
+        if (_enableBookmarks) {
+            //Add space
+            UIBarButtonItem *space = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace target:nil action:nil];
+            space.width = 10.0;
+            [buttonsArray addObject:space];
+            //Add bookmarks
+            //Change image based on wether or not the page is bookmarked
+            if (![self pageHasBookmark:_document.currentPage]) {
+                _bookmarkItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Bookmark"] style:UIBarButtonItemStylePlain target:self action:@selector(bookmark)];
+            } else {
+                _bookmarkItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Bookmarked"] style:UIBarButtonItemStylePlain target:self action:@selector(bookmark)];
+            }
+            
+            [buttonsArray addObject:_bookmarkItem];
+        }
     } else {
         
         //Set controls for thumbs
         //Done Button
         if (!_standalone) {
-            [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismiss)]];
+            //Go back
+            UIBarButtonItem *listItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"ic_back_button"] landscapeImagePhone:[UIImage imageNamed:@"ic_back_button"] style:UIBarButtonItemStylePlain target:self action:@selector(list)];
+            
+            [buttonsArray addObject:listItem];
             [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
+            //            [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismiss)]];
+            //            [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
         }
         
         //Add space if necessary
@@ -303,12 +389,9 @@
             [buttonsArray addObject:space];
         }
         
-        //Go back
-        if (!self.backButtonTitle) {
-            self.backButtonTitle = @"Resume";
-        }
-        UIBarButtonItem *listItem = [[UIBarButtonItem alloc] initWithTitle:self.backButtonTitle style:UIBarButtonItemStylePlain target:self action:@selector(list)];
-        [buttonsArray addObject:listItem];
+        //        //Go back
+        //        UIBarButtonItem *listItem = [[UIBarButtonItem alloc] initWithTitle:@"Resume" style:UIBarButtonItemStylePlain target:self action:@selector(list)];
+        //        [buttonsArray addObject:listItem];
         
         //Flexible space
         [buttonsArray addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
@@ -325,12 +408,34 @@
     [_navigationToolbar setItems:buttonsArray animated:YES];
 }
 
+-  (BOOL)pageHasBookmark:(NSInteger)page {
+    return [_document.bookmarks containsIndex:page];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField
+{
+    [textField resignFirstResponder]; // Dismiss the keyboard.
+    // Execute any additional code
+    if ([textField.text integerValue] <= _document.pageCount){
+        _document.currentPage = [textField.text integerValue];
+        [_pageScrubber updateScrubber];
+        [_pageCollectionView displayPage:_document.currentPage animated:YES];
+        [self resetNavigationToolbar];
+    }
+    return YES;
+}
+
 #pragma mark - Actions
 
 - (void)dismiss
 {
+    NSString * storyboardName = @"Home";
+    UIStoryboard *storyboard = [UIStoryboard storyboardWithName:storyboardName bundle: nil];
+    
     if (self.presentingViewController) {
-        [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+        //[self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+        UIViewController * vc = [storyboard instantiateViewControllerWithIdentifier:@"InitialController"];
+        [self presentViewController:vc animated:YES completion:nil];
     }
 }
 
@@ -375,8 +480,8 @@
     }
 }
 
-- (void)bookmark
-{
+- (void)bookmark {
+    
     if ([_document.bookmarks containsIndex:_document.currentPage]) {
         //Remove the bookmark
         [_document.bookmarks removeIndex:_document.currentPage];
@@ -407,7 +512,7 @@
 
 - (void)thumbCollectionView:(PDFKBasicPDFViewerThumbsCollectionView *)thumbsCollectionView didSelectPage:(NSUInteger)page
 {
-    [self.pageCollectionView displayPage:page animated:YES];
+    [self.pageCollectionView displayPage:page animated:NO];
     self.document.currentPage = page;
     [self.pageScrubber updateScrubber];
     [self toggleSinglePageView];
@@ -425,10 +530,6 @@
     self.document.currentPage = page;
     [self.pageScrubber updateScrubber];
     [self resetNavigationToolbar];
-    
-    if (_pageChangeBlock) {
-        _pageChangeBlock(page);
-    }
 }
 
 - (void)nextPage
@@ -488,18 +589,21 @@
             //Check what side the touch is on
             CGPoint touch = [gestureRecognizer locationInView:self.view];
             
+            [self toggleToolbars];
+            
+            
             //Left side
-            if (CGRectContainsPoint(CGRectMake(0, 0, self.view.frame.size.width * .33, self.view.frame.size.height), touch)) {
-                [self previousPage];
-                
-            } else if (CGRectContainsPoint(CGRectMake(self.view.frame.size.width * .33, 0, self.view.frame.size.width * .33, self.view.frame.size.height), touch)) {
-                //Center
-                [self toggleToolbars];
-                
-            } else {
-                //Right
-                [self nextPage];
-            }
+            /*if (CGRectContainsPoint(CGRectMake(0, 0, self.view.frame.size.width * .33, self.view.frame.size.height), touch)) {
+             [self previousPage];
+             
+             } else if (CGRectContainsPoint(CGRectMake(self.view.frame.size.width * .33, 0, self.view.frame.size.width * .33, self.view.frame.size.height), touch)) {
+             //Center
+             [self toggleToolbars];
+             
+             } else {
+             //Right
+             [self nextPage];
+             }*/
         }
     }
 }

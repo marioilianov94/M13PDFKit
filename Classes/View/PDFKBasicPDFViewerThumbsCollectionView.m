@@ -68,8 +68,8 @@
         NSMutableArray *temp = [NSMutableArray array];
         
         [_document.bookmarks enumerateIndexesUsingBlock:^(NSUInteger page, BOOL *stop) {
-             [temp addObject:[NSNumber numberWithInteger:page]];
-         }];
+            [temp addObject:[NSNumber numberWithInteger:page]];
+        }];
         
         _bookmarkedPages = [temp copy];
         _showBookmarkedPages = YES;

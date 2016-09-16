@@ -75,12 +75,12 @@
 + (id)newWithRect:(CGRect)linkRect dictionary:(CGPDFDictionaryRef)linkDictionary;
 /**
  Create a new document link.
-
-@param linkRect       The rect of the link on the page.
-@param linkDictionary The link's information.
-
-@return A new document link.
-*/
+ 
+ @param linkRect       The rect of the link on the page.
+ @param linkDictionary The link's information.
+ 
+ @return A new document link.
+ */
 - (id)initWithRect:(CGRect)linkRect dictionary:(CGPDFDictionaryRef)linkDictionary;
 
 @end

@@ -51,87 +51,97 @@ static inline NSString *NSStringCCHashFunction(unsigned char *(function)(const v
 
 + (PDFKDocument *)unarchiveDocumentForContentsOfFile:(NSString *)filePath password:(NSString *)password
 {
-	PDFKDocument *document = nil;
+    PDFKDocument *document = nil;
     
     //Get the archive of the PDF
-	NSString *archiveFilePath = [PDFKDocument archiveFilePathForFileAtPath:filePath];
+    NSString *archiveFilePath = [PDFKDocument archiveFilePathForFileAtPath:filePath];
     
     //Unarchive an archived ReaderDocument object from its property list
-	@try {
-		document = [NSKeyedUnarchiver unarchiveObjectWithFile:archiveFilePath];
-		if ((document != nil) && (password != nil)) { // Set the document password
-			[document setValue:[password copy] forKey:@"password"];
-		}
+    @try {
+        document = [NSKeyedUnarchiver unarchiveObjectWithFile:archiveFilePath];
+        if ((document != nil) && (password != nil)) { // Set the document password
+            [document setValue:[password copy] forKey:@"password"];
+        }
         
-	} @catch (NSException *exception) { // Exception handling (just in case O_o)
+    } @catch (NSException *exception) { // Exception handling (just in case O_o)
 #ifdef DEBUG
         NSLog(@"%s Caught %@: %@", __FUNCTION__, [exception name], [exception reason]);
 #endif
-	}
+    }
     
-	return document;
+    return document;
 }
 
 + (PDFKDocument *)documentWithContentsOfFile:(NSString *)filePath password:(NSString *)password
 {
-	PDFKDocument *document = nil;
+    PDFKDocument *document = nil;
     
-	document = [PDFKDocument unarchiveDocumentForContentsOfFile:filePath password:password];
+    document = [PDFKDocument unarchiveDocumentForContentsOfFile:filePath password:password];
     
     //Unarchive failed so we create a new ReaderDocument object
-	if (document == nil) {
-		document = [[PDFKDocument alloc] initWithContentsOfFile:filePath password:password];
-	}
+    if (document == nil) {
+        document = [[PDFKDocument alloc] initWithContentsOfFile:filePath password:password];
+    }
     
-	return document;
+    return document;
 }
 
 
 - (id)initWithContentsOfFile:(NSString *)filePath password:(NSString *)password
 {
-	id object = nil;
+    id object = nil;
     //Does the PDF exist, and is it a PDF
-	if ([PDFKDocument isPDF:filePath] == YES) {
-		if ((self = [super init])) {
+    if ([PDFKDocument isPDF:filePath] == YES) {
+        if ((self = [super init])) {
             //Set the initial properties
-			_guid = [PDFKDocument GUID];
-			_password = [password copy];
-			_bookmarks = [NSMutableIndexSet new];
-			_currentPage = 1;
+            _guid = [PDFKDocument GUID];
+            _password = [password copy];
+            
+            if ([[NSUserDefaults standardUserDefaults] objectForKey:@"Bookmarks"] != nil){
+                NSData *recoverBookmarks = [[NSUserDefaults standardUserDefaults] objectForKey:@"Bookmarks"];
+                NSIndexSet *setFromData= [NSKeyedUnarchiver unarchiveObjectWithData: recoverBookmarks];
+                NSMutableIndexSet *mutableBookmarkSet = [setFromData mutableCopy];
+                
+                _bookmarks = mutableBookmarkSet;
+            } else {
+                _bookmarks = [NSMutableIndexSet new];
+            }
+            
+            _currentPage = 1;
             _fileURL = [[NSURL alloc] initFileURLWithPath:filePath isDirectory:NO];
             
             [self loadDocumentInformation];
             
-			_lastOpenedDate = [NSDate dateWithTimeIntervalSinceReferenceDate:0.0];
+            _lastOpenedDate = [NSDate dateWithTimeIntervalSinceReferenceDate:0.0];
             
             //Save the document information to the archive.
-			[self saveReaderDocument];
+            [self saveReaderDocument];
             
-			object = self;
-		}
-	}
+            object = self;
+        }
+    }
     
-	return object;
+    return object;
 }
 
 - (id)initWithCoder:(NSCoder *)decoder
 {
-	if ((self = [super init])) // Superclass init
-	{
-		_guid = [decoder decodeObjectForKey:@"FileGUID"];
-		_currentPage = ((NSNumber *)[decoder decodeObjectForKey:@"CurrentPage"]).unsignedIntegerValue;
-		_bookmarks = [decoder decodeObjectForKey:@"Bookmarks"];
-		_lastOpenedDate = [decoder decodeObjectForKey:@"LastOpen"];
+    if ((self = [super init])) // Superclass init
+    {
+        _guid = [decoder decodeObjectForKey:@"FileGUID"];
+        _currentPage = ((NSNumber *)[decoder decodeObjectForKey:@"CurrentPage"]).unsignedIntegerValue;
+        _bookmarks = [decoder decodeObjectForKey:@"Bookmarks"];
+        _lastOpenedDate = [decoder decodeObjectForKey:@"LastOpen"];
         _fileURL = [NSURL fileURLWithPath:[decoder decodeObjectForKey:@"URL"]];
-		if (_guid == nil) _guid = [PDFKDocument GUID];
-		if (_bookmarks != nil)
-			_bookmarks = [_bookmarks mutableCopy];
-		else
-			_bookmarks = [NSMutableIndexSet new];
+        if (_guid == nil) _guid = [PDFKDocument GUID];
+        if (_bookmarks != nil)
+            _bookmarks = [_bookmarks mutableCopy];
+        else
+            _bookmarks = [NSMutableIndexSet new];
         [self loadDocumentInformation];
-	}
+    }
     
-	return self;
+    return self;
 }
 
 - (void)loadDocumentInformation
@@ -215,7 +225,7 @@ static inline NSString *NSStringCCHashFunction(unsigned char *(function)(const v
     CGPDFDocumentGetVersion(thePDFDocRef, &majorVersion, &minorVersion);
     NSString *versionString = [NSString stringWithFormat:@"%d.%d", majorVersion, minorVersion];
     _version = versionString.floatValue;
-
+    
     //Page Count
     _pageCount = CGPDFDocumentGetNumberOfPages(thePDFDocRef);
     
@@ -232,67 +242,67 @@ static inline NSString *NSStringCCHashFunction(unsigned char *(function)(const v
 + (NSString *)GUID
 {
     //Create a globally unique string.
-	return [[NSProcessInfo processInfo] globallyUniqueString];
+    return [[NSProcessInfo processInfo] globallyUniqueString];
 }
 
 + (NSString *)documentsPath
 {
     //Get the document folder path.
-	return NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
+    return NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
 }
 
 + (NSString *)applicationPath
 {
     //Get the folder that the application is contained in.
-	NSArray *documentsPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-	return [[documentsPaths objectAtIndex:0] stringByDeletingLastPathComponent]; // Strip "Documents" component
+    NSArray *documentsPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    return [[documentsPaths objectAtIndex:0] stringByDeletingLastPathComponent]; // Strip "Documents" component
 }
 
 + (NSString *)applicationSupportPath
 {
     //Path to the application's "~/Library/Application Support" directory
-	NSFileManager *fileManager = [NSFileManager new];
-	NSURL *pathURL = [fileManager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:NULL];
-	return [pathURL path];
+    NSFileManager *fileManager = [NSFileManager new];
+    NSURL *pathURL = [fileManager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:NULL];
+    return [pathURL path];
 }
 
 + (NSString *)archiveFilePathForFileAtPath:(NSString *)path
 {
-	assert(path != nil); // Ensure that the archive file name is not nil
-	NSString *archivePath = [PDFKDocument applicationSupportPath]; // Application's "~/Library/Application Support" path
-	NSString *archiveName = [NSStringCCHashFunction(CC_SHA256, CC_SHA256_DIGEST_LENGTH, path) stringByAppendingPathExtension:@"plist"];
-	return [archivePath stringByAppendingPathComponent:archiveName];
+    assert(path != nil); // Ensure that the archive file name is not nil
+    NSString *archivePath = [PDFKDocument applicationSupportPath]; // Application's "~/Library/Application Support" path
+    NSString *archiveName = [NSStringCCHashFunction(CC_SHA256, CC_SHA256_DIGEST_LENGTH, path) stringByAppendingPathExtension:@"plist"];
+    return [archivePath stringByAppendingPathComponent:archiveName];
 }
 
 + (BOOL)isPDF:(NSString *)filePath
 {
     //Check to see if a file is a PDF
-	BOOL state = NO;
+    BOOL state = NO;
     
-	if (filePath != nil) { // Must have a file path
-		const char *path = [filePath fileSystemRepresentation];
+    if (filePath != nil) { // Must have a file path
+        const char *path = [filePath fileSystemRepresentation];
         
-		int fd = open(path, O_RDONLY); // Open the file
+        int fd = open(path, O_RDONLY); // Open the file
         
-		if (fd > 0) // We have a valid file descriptor
-		{
-			const char sig[1024]; // File signature buffer
+        if (fd > 0) // We have a valid file descriptor
+        {
+            const char sig[1024]; // File signature buffer
             
-			ssize_t len = read(fd, (void *)&sig, sizeof(sig));
+            ssize_t len = read(fd, (void *)&sig, sizeof(sig));
             
-			state = (strnstr(sig, "%PDF", len) != NULL);
+            state = (strnstr(sig, "%PDF", len) != NULL);
             
-			close(fd); // Close the file
-		}
-	}
+            close(fd); // Close the file
+        }
+    }
     
-	return state;
+    return state;
 }
 
 - (BOOL)archiveWithFileAtPath:(NSString *)filePath
 {
     NSString *archiveFilePath = [PDFKDocument archiveFilePathForFileAtPath:filePath];
-	return [NSKeyedArchiver archiveRootObject:self toFile:archiveFilePath];
+    return [NSKeyedArchiver archiveRootObject:self toFile:archiveFilePath];
 }
 
 - (void)saveReaderDocument
@@ -302,7 +312,7 @@ static inline NSString *NSStringCCHashFunction(unsigned char *(function)(const v
 
 - (void)updateProperties
 {
-	[self loadDocumentInformation];
+    [self loadDocumentInformation];
 }
 
 - (void)setCurrentPage:(NSUInteger)currentPage
@@ -319,11 +329,14 @@ static inline NSString *NSStringCCHashFunction(unsigned char *(function)(const v
 
 - (void)encodeWithCoder:(NSCoder *)encoder
 {
-	[encoder encodeObject:_guid forKey:@"FileGUID"];
-	[encoder encodeObject:[NSNumber numberWithUnsignedInteger:_currentPage] forKey:@"CurrentPage"];
-	[encoder encodeObject:_bookmarks forKey:@"Bookmarks"];
-	[encoder encodeObject:_lastOpenedDate forKey:@"LastOpen"];
+    [encoder encodeObject:_guid forKey:@"FileGUID"];
+    [encoder encodeObject:[NSNumber numberWithUnsignedInteger:_currentPage] forKey:@"CurrentPage"];
+    [encoder encodeObject:_bookmarks forKey:@"Bookmarks"];
+    [encoder encodeObject:_lastOpenedDate forKey:@"LastOpen"];
     [encoder encodeObject:[_fileURL path] forKey:@"URL"];
+    NSData *toSaveBookmarks = [NSKeyedArchiver archivedDataWithRootObject: _bookmarks];
+    [[NSUserDefaults standardUserDefaults] setObject:toSaveBookmarks forKey:@"Bookmarks"];
+    
 }
 
 
