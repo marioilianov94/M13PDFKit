@@ -325,7 +325,7 @@
         self.numberOfPage.keyboardType = UIKeyboardTypeDefault;
         [pageChangeView addSubview:self.numberOfPage];
         
-        UILabel *labelOfPages = [[UILabel alloc] initWithFrame:CGRectMake(40, 0, 40, 20)];
+        UILabel *labelOfPages = [[UILabel alloc] initWithFrame:CGRectMake(40, 0, 60, 20)];
         labelOfPages.text = [NSString stringWithFormat:@"de %i", _document.pageCount];
         [pageChangeView addSubview:labelOfPages];
         
